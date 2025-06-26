@@ -7,13 +7,13 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v2
@@ -23,28 +23,24 @@ jobs:
         aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Login to Amazon ECR
-      id: login-ecr
-      run: |
-        aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
-        docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+      id: ecr-login
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        registry-ids: ${{ secrets.AWS_ACCOUNT_ID }}
 
-    - name: Build, tag, and push image to Amazon ECR
+    - name: Build and push Docker image
       env:
         ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       run: |
-        # Build the Docker image
-        docker build -t $ECR_REPOSITORY .
+        # Verify registry format
+        echo "ECR Registry: $ECR_REGISTRY"
         
-        # Tag the image
-        docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        
-        # Push the image
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        
-        # Also push with timestamp tag
+        # Build with timestamp tag
         IMAGE_TAG=$(date +%Y%m%d%H%M%S)
-        docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        
+        # Push image
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
