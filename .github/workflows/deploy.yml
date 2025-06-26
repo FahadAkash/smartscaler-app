@@ -22,26 +22,30 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    # Modified ECR login step
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-      with:
-        registry-ids: ${{ secrets.AWS_ACCOUNT_ID }}  # Add your AWS account ID to secrets
+      run: |
+        aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+        docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
-    - name: Build and push Docker image to ECR
+    - name: Build, tag, and push image to Amazon ECR
       env:
         ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       run: |
+        # Build the Docker image
+        docker build -t $ECR_REPOSITORY .
+        
+        # Tag the image
+        docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+        # Push the image
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+        # Also push with timestamp tag
         IMAGE_TAG=$(date +%Y%m%d%H%M%S)
-        
-        # Build with explicit registry URL
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
-        
-        # Push the image (no separate tag needed)
+        docker tag $ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        
         echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
     - name: Deploy to ECS
